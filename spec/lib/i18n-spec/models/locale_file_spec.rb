@@ -1,5 +1,3 @@
-require 'spec_helper'
-
 module LocaleFileHelper
   def locale_file_with_content(content)
     locale_file = I18nSpec::LocaleFile.new('test.yml')

@@ -1,5 +1,3 @@
-require 'spec_helper'
-
 describe "Valid file" do
   it_behaves_like "a valid locale file", 'spec/fixtures/en.yml'
 end
