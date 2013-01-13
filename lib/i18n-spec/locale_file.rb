@@ -85,6 +85,16 @@ module I18nSpec
       locale_code == File.basename(@filepath, File.extname(@filepath))
     end
 
+    def is_a_complete_translation_of? locale_file
+      missing_keys_from_locale(locale_file).empty?
+    end
+
+    def missing_keys_from_locale locale_file
+      locale_file.flattened_translations.keys.reject do |key|
+        flattened_translations.keys.include?(key)
+      end
+    end
+
   protected
 
     def flatten_tree(data, prefix = '', result = {})

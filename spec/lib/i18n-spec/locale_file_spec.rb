@@ -168,4 +168,55 @@ describe I18nSpec::LocaleFile do
       locale_file.errors[:missing_pluralization_keys].should be_nil
     end
   end
+
+  describe "#is_a_complete_translation_of?" do
+    let(:locale_file) { locale_file_with_content <<-YAML }
+de:
+  save: "Speichern"
+  edit: "Bearbeiten"
+    YAML
+
+    it "should return true when the locale file is a super set of the given locale file" do
+      super_set = locale_file_with_content <<-YAML
+en:
+  save: "Save"
+  edit: "Edit"
+      YAML
+
+      locale_file.is_a_complete_translation_of?(super_set).should be true
+    end
+
+    it "should return false when the locale file is a subset of the given locale file" do
+      subset = locale_file_with_content <<-YAML
+en:
+  save: "Save"
+  edit: "Edit"
+  view: "View"
+      YAML
+
+      locale_file.is_a_complete_translation_of?(subset).should be false
+    end
+  end
+
+  describe "#missing_keys_from_locale" do
+    it "should return an array of keys that are missing in the locale file when compared to the given one" do
+      english = locale_file_with_content <<-YAML
+en:
+  save: "Save"
+  edit: "Edit"
+  action:
+    add: "Add"
+    tag: "Tag"
+      YAML
+
+      german = locale_file_with_content <<-YAML
+de:
+  save: "Speichern"
+  action:
+    tag: "Markieren"
+      YAML
+
+      german.missing_keys_from_locale(english).should =~ ["edit", "action.add"]
+    end
+  end
 end

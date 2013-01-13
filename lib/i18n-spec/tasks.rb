@@ -38,21 +38,22 @@ namespace :'i18n-spec' do
     if ARGV[1].nil? || ARGV[2].nil?
       puts "You must specify a default locale file and translated file or a folder of translated files"
     elsif File.directory?(ARGV[2])
-      translated_filepaths = Dir.glob("#{ARGV[2]}/*.yml")
+      locale_files = Dir.glob("#{ARGV[2]}/*.yml")
     else
-      translated_filepaths = [ARGV[2]]
+      locale_files = [ARGV[2]]
     end
+
     default_locale = I18nSpec::LocaleFile.new(ARGV[1])
-    translated_filepaths.each do |translated_filepath|
-      heading translated_filepath
-      locale_file = I18nSpec::LocaleFile.new(translated_filepath)
-      misses = default_locale.flattened_translations.keys.reject do |key|
-        locale_file.flattened_translations.keys.include?(key)
-      end
-      if misses.empty?
+
+    locale_files.each do |locale_path|
+      heading locale_path
+
+      locale_file = I18nSpec::LocaleFile.new(locale_path)
+
+      if locale_file.is_a_complete_translation_of? default_locale
         log :complete
       else
-        misses.each { |miss| log :missing, miss }
+        locale_file.missing_keys_from_locale(default_locale).each { |miss| log :missing, miss }
       end
     end
   end
