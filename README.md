@@ -2,7 +2,17 @@
 
 [![Build Status](https://secure.travis-ci.org/tigrish/i18n-spec.png)](http://travis-ci.org/tigrish/i18n-spec)
 
-i18n-spec provides RSpec matchers for testing your locale files and their translations.
+i18n-spec provides RSpec matchers for testing your locale files and their translations. You can include the matchers with
+
+```rb
+require "i18n-spec/matchers"
+```
+
+and the shared examples with
+
+```rb
+require "i18n-spec/shared_examples"
+```
 
 ## Testing the validity of your locale files
 
