@@ -1,3 +1,5 @@
+require "yaml"
+
 if defined?(Psych) and defined?(Psych::VERSION) and !defined?(YAML::ParseError)
   YAML::ParseError = Psych::SyntaxError
 end
