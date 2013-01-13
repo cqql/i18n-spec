@@ -44,6 +44,7 @@ namespace :'i18n-spec' do
     end
 
     default_locale = I18nSpec::LocaleFile.new(ARGV[1])
+    any_locale_incomplete = false
 
     locale_files.each do |locale_path|
       heading locale_path
@@ -53,8 +54,14 @@ namespace :'i18n-spec' do
       if locale_file.is_a_complete_translation_of? default_locale
         log :complete
       else
+        any_locale_incomplete = true
+
         locale_file.missing_keys_from_locale(default_locale).each { |miss| log :missing, miss }
       end
+    end
+
+    if any_locale_incomplete
+      raise "There were incomplete locales."
     end
   end
 
