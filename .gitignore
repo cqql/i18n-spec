@@ -16,3 +16,8 @@ pkg
 
 # rvm
 .rvmrc
+
+# Ignore project files
+.*
+*.iml
+
