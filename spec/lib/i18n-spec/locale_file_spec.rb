@@ -1,110 +1,106 @@
 module LocaleFileHelper
   def locale_file_with_content(content)
-    locale_file = I18nSpec::LocaleFile.new('test.yml')
-    locale_file.should_receive(:content).and_return(content)
-    locale_file
+    create_locale "spec/fixtures/en.yml", content
+  end
+
+  def create_locale path, content
+    I18nSpec::LocaleFile.new path, YAML.load(content)
   end
 end
 
 describe I18nSpec::LocaleFile do
   include LocaleFileHelper
 
-  describe "#locale_code" do
-    it "returns the first key of the file" do
+  describe "#locale" do
+    it "should return the locale of the file" do
       locale_file = locale_file_with_content("pt-BR:\n  hello: world")
-      locale_file.locale_code.should == 'pt-BR'
+      locale_file.locale.should == 'pt-BR'
     end
   end
 
-  describe "#locale" do
+  describe "#locale_tag" do
     it "returns an ISO::Tag based on the locale_code" do
       locale_file = locale_file_with_content("pt-BR:\n  hello: world")
-      locale_file.locale.should be_a(ISO::Tag)
-      locale_file.locale.language.code.should == 'pt'
-      locale_file.locale.region.code.should   == 'BR'
+      locale_file.locale_tag.should be_a(ISO::Tag)
+      locale_file.locale_tag.language.code.should == 'pt'
+      locale_file.locale_tag.region.code.should == 'BR'
     end
   end
 
-  describe "#is_parseable?" do
-    context "when YAML is parseable" do
-      let(:locale_file) { locale_file_with_content("en:\n  hello: world") }
+  describe "#is_named_like_locale?" do
+    it "should return true when the file is named like the contained locale" do
+      locale_file = create_locale "spec/fixtures/en.yml", <<-YAML
+en:
+  save: "Save"
+      YAML
 
-      it "returns true" do
-        locale_file.is_parseable?.should == true
-      end
+      locale_file.is_named_like_locale?.should be true
     end
 
-    context "when YAML is NOT parseable" do
-      let(:locale_file) { locale_file_with_content("<This isn't YAML>: foo: bar:") }
+    it "should return false when the file is named like the contained locale" do
+      locale_file = create_locale "spec/fixtures/en.yml", <<-YAML
+de:
+  save: "Speichern"
+      YAML
 
-      it "returns false" do
-        locale_file.is_parseable?.should == false
-      end
-
-      it "adds an :unparseable error" do
-        locale_file.is_parseable?
-        locale_file.errors[:unparseable].should_not be_nil
-      end
-    end
-  end
-
-  describe "#pluralizations" do
-    let(:content) {
-      "en:
-        cats:
-          one: one
-          two: two
-          three: three
-        dogs:
-          one: one
-          some: some
-        birds:
-          penguins: penguins
-          doves: doves"}
-
-    it "returns the leaf where one of the keys is a pluralization key" do
-      locale_file = locale_file_with_content(content)
-      locale_file.pluralizations.should == {
-        'en.cats' => {'one' => 'one', 'two' => 'two', 'three' => 'three'},
-        'en.dogs' => {'one' => 'one', 'some' => 'some'},
-      }
+      locale_file.is_named_like_locale?.should be false
     end
   end
 
   describe "#invalid_pluralization_keys" do
-    let(:content) {
-      "en:
-        cats:
-          one: one
-          two: two
-          tommy: tommy
-          tabby: tabby
-        dogs:
-          one: one
-          some: some
-        birds:
-          zero: zero
-          other: other"}
-      let(:locale_file) { locale_file_with_content(content) }
+    it "should return nodes that contain at least one but not all needed pluralization keys" do
+      locale_file = locale_file_with_content <<-YAML
+en:
+  animals:
+    cats:
+      one: "A cat"
+      two: "Two cats"
+      name: "Tommy"
+      YAML
 
-    it "returns the parent that contains invalid pluralizations" do
-      locale_file.invalid_pluralization_keys.size.should == 2
-      locale_file.invalid_pluralization_keys.should be_include 'en.cats'
-      locale_file.invalid_pluralization_keys.should be_include 'en.dogs'
-      locale_file.invalid_pluralization_keys.should_not be_include 'en.birds'
+      locale_file.invalid_pluralization_keys.should include "animals.cats"
     end
 
-    it "adds a :invalid_pluralization_keys error with each invalid key" do
-      locale_file.invalid_pluralization_keys
-      locale_file.invalid_pluralization_keys.size.should == 2
-      locale_file.invalid_pluralization_keys.should be_include 'en.cats'
-      locale_file.invalid_pluralization_keys.should be_include 'en.dogs'
-      locale_file.invalid_pluralization_keys.should_not be_include 'en.birds'
+    it "should not return nodes that do no contain any pluralization keys" do
+      locale_file = locale_file_with_content <<-YAML
+en:
+  animals:
+    birds:
+      eagle: "Eagle"
+      hawk: "Hawk"
+      YAML
+
+      locale_file.invalid_pluralization_keys.should_not include "animals.birds"
+    end
+
+    it "should not return nodes that are valid pluralization keys" do
+      locale_file = locale_file_with_content <<-YAML
+en:
+  animals:
+    elephants:
+      one: "An elephant"
+      other: "An elephant mob"
+      YAML
+
+      locale_file.invalid_pluralization_keys.should_not include "animals.elephants"
     end
   end
 
   describe "#missing_pluralization_keys" do
-    it "returns the parents that containts missing pluralizations in with the english rules" do
+    it "should not include nodes that are not pluralizations at all" do
+      locale_file = locale_file_with_content <<-YAML
+en:
+  cats:
+    one: "A cat"
+  dogs:
+    big: "Labrador"
+    small: "Dachshund"
+      YAML
+
+      locale_file.missing_pluralization_keys.should == { "cats" => ["other"]}
+    end
+
+    it "returns the parents that contain missing pluralizations in with the english rules" do
       content = "en:
         cats:
           one: one
@@ -115,13 +111,12 @@ describe I18nSpec::LocaleFile do
           other: other"
       locale_file = locale_file_with_content(content)
       locale_file.missing_pluralization_keys.should == {
-        'en.cats' => %w(other),
-        'en.dogs' => %w(one)
+        'cats' => %w(other),
+        'dogs' => %w(one)
       }
-      locale_file.errors[:missing_pluralization_keys].should_not be_nil
     end
 
-    it "returns the parents that containts missing pluralizations in with the russian rules" do
+    it "returns the parents that contain missing pluralizations in with the russian rules" do
       content = "ru:
         cats:
           one: one
@@ -138,22 +133,23 @@ describe I18nSpec::LocaleFile do
           other: other"
       locale_file = locale_file_with_content(content)
       locale_file.missing_pluralization_keys.should == {
-        'ru.dogs'  => %w(few many),
-        'ru.birds' => %w(many)
+        'dogs' => %w(few many),
+        'birds' => %w(many)
       }
-      locale_file.errors[:missing_pluralization_keys].should_not be_nil
     end
 
-    it "returns the parents that containts missing pluralizations in with the japanese rules" do
+    # Here the result should be empty because ja.cats is no pluralization because it does not even have one
+    # pluralization key. If ja.cats was a pluralization every japanese key would be.
+    it "returns the parents that contain missing pluralizations in with the japanese rules" do
       content = "ja:
         cats:
-          one: one
+          one: A cat
         dogs:
-          other: some
+          other: some dog
         birds: not really a pluralization"
+
       locale_file = locale_file_with_content(content)
-      locale_file.missing_pluralization_keys.should == { 'ja.cats' => %w(other) }
-      locale_file.errors[:missing_pluralization_keys].should_not be_nil
+      locale_file.missing_pluralization_keys.should == { }
     end
 
     it "returns an empty hash when all pluralizations are complete" do
@@ -164,8 +160,7 @@ describe I18nSpec::LocaleFile do
           other: some
         birds: not really a pluralization"
       locale_file = locale_file_with_content(content)
-      locale_file.missing_pluralization_keys.should == {}
-      locale_file.errors[:missing_pluralization_keys].should be_nil
+      locale_file.missing_pluralization_keys.should == { }
     end
   end
 
@@ -217,6 +212,42 @@ de:
       YAML
 
       german.missing_keys_from_locale(english).should =~ ["edit", "action.add"]
+    end
+  end
+
+  describe "#keys" do
+    it "should return all saved translation keys" do
+      english = locale_file_with_content <<-YAML
+en:
+  save: "Save"
+  action:
+    tag: "Tag"
+      YAML
+
+      english.keys.should == ["save", "action.tag"]
+    end
+
+    it "should treat pluralized keys as one key" do
+      english = locale_file_with_content <<-YAML
+en:
+  animals:
+    cats:
+      one: "A cat"
+      other: "Many cats"
+    dogs:
+      one: "A cat"
+      other: "Some dogs"
+    birds:
+      name: "Heinrich"
+      YAML
+
+      english.keys.should == ["animals.cats", "animals.dogs", "animals.birds.name"]
+    end
+  end
+
+  describe "#from_file" do
+    it "should return a new instance of LocaleFile" do
+      I18nSpec::LocaleFile.from_file("spec/fixtures/en.yml").should be_a I18nSpec::LocaleFile
     end
   end
 end

@@ -1,6 +1,5 @@
 RSpec::Matchers.define :have_legacy_interpolations do
   match do |actual|
-    locale_file = I18nSpec::LocaleFile.new(actual)
-    locale_file.content =~ /\{\{.+\}\}/
+    IO.read(actual).should =~ /\{\{.+\}\}/
   end
 end

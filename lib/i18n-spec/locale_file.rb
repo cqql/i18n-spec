@@ -2,71 +2,82 @@ module I18nSpec
   class LocaleFile
     PLURALIZATION_KEYS = %w{zero one two few many other}
 
-    attr_accessor :filepath
+    attr_accessor :path
     attr_reader :errors
 
-    def initialize(filepath)
-      @filepath = filepath
-      @errors = {}
-    end
+    attr_reader :locale
+    attr_reader :translations
 
-    def content
-      @content ||= IO.read(@filepath)
-    end
-
-    def translations
-      @translations ||= yaml_load_content
-    end
-
-    def flattened_translations
-      @flattened_translations ||= flatten_tree(translations.values.first)
-    end
-
-    def locale
-      @locale ||= ISO::Tag.new(locale_code)
-    end
-
-    def locale_code
-      translations.keys.first
-    end
-
-    def pluralizations
-      result = flatten_tree(translations).select do |key, value|
-        value.is_a?(Hash)
+    def initialize path, hash
+      if hash.keys.size > 1
+        raise MultipleTopLevelKeys
       end
 
-      if result.is_a?(Array)
-        Hash[result]
-      else
-        result
-      end
+      @path = path
+      @locale = hash.keys.first
+      @translations = hash[@locale]
+      @errors = { }
+    end
+
+    def locale_tag
+      @locale_tag ||= ISO::Tag.new(locale)
     end
 
     def invalid_pluralization_keys
-      invalid = []
-      pluralizations.each do |parent, pluralization|
-        unless pluralization.keys.all? { |key| PLURALIZATION_KEYS.include?(key) }
-          invalid << parent
+      filter = lambda do |hash|
+        invalid_nodes = { }
+
+        if hash.is_a? Hash
+          hash.each do |key, value|
+            if value.is_a? Hash
+              if has_pluralization_keys?(value) && !is_pluralization?(value)
+                invalid_nodes[key] = 0
+              else
+                invalid_subnodes = filter.call value
+
+                invalid_nodes[key] = invalid_subnodes if !invalid_subnodes.empty?
+              end
+            end
+          end
         end
+
+        invalid_nodes
       end
-      @errors[:invalid_pluralization_keys] = invalid unless invalid.empty?
-      invalid
+
+      keys_to_dot_notation filter.call(@translations)
     end
 
     def missing_pluralization_keys
-      return_data = {}
-      rule_names = locale.language.plural_rule_names
-      pluralizations.each do |parent, pluralization|
-        missing_keys = rule_names - pluralization.keys
-        return_data[parent] = missing_keys if missing_keys.any?
+      is_incomplete_pluralization = lambda do |node|
+        all_keys = locale_tag.language.plural_rule_names
+        missing_keys = all_keys - node.keys
+
+        !missing_keys.empty? && all_keys != missing_keys
       end
-      @errors[:missing_pluralization_keys] = return_data if return_data.any?
-      return_data
+
+      filter = lambda do |hash|
+        invalid_nodes = { }
+
+        if hash.is_a? Hash
+          hash.each do |key, value|
+            if value.is_a? Hash
+              if is_incomplete_pluralization.call value
+                invalid_nodes[key] = locale_tag.language.plural_rule_names - value.keys
+              else
+                invalid_nodes[key] = filter.call value
+              end
+            end
+          end
+        end
+
+        invalid_nodes
+      end
+
+      flatten_keys filter.call(@translations)
     end
 
     def is_parseable?
       begin
-        yaml_load_content
         true
       rescue YAML::ParseError => e
         @errors[:unparseable] = e.to_s
@@ -81,8 +92,8 @@ module I18nSpec
       translations.keys.size == 1
     end
 
-    def is_named_like_top_level_namespace?
-      locale_code == File.basename(@filepath, File.extname(@filepath))
+    def is_named_like_locale?
+      locale == File.basename(@path, File.extname(@path))
     end
 
     def is_a_complete_translation_of? locale_file
@@ -90,33 +101,68 @@ module I18nSpec
     end
 
     def missing_keys_from_locale locale_file
-      locale_file.flattened_translations.keys.reject do |key|
-        flattened_translations.keys.include?(key)
-      end
+      locale_file.keys - keys
     end
 
-  protected
+    def keys
+      keys_to_dot_notation @translations
+    end
 
-    def flatten_tree(data, prefix = '', result = {})
-      data.each do |key, value|
-        current_prefix = prefix.empty? ? key.to_s : "#{prefix}.#{key}"
-        if !value.is_a?(Hash) || pluralization_data?(value)
-          result[current_prefix] = value
+    def self.from_file path
+      content = IO.read(path)
+
+      new path, YAML.load(content)
+    end
+
+    class InvalidLocale < Exception
+
+    end
+
+    class MultipleTopLevelKeys < InvalidLocale
+
+    end
+
+    protected
+
+    def flatten_keys hash, prefix = []
+      flattened = { }
+
+      hash.each do |key, value|
+        if value.is_a? Hash
+          flattened = flattened.merge flatten_keys(value, prefix + [key])
         else
-          flatten_tree(value, current_prefix, result)
+          flattened[(prefix + [key]).join(".")] = value
         end
       end
-      result
+
+      flattened
+    end
+
+    def keys_to_dot_notation hash, prefix = []
+      keys = []
+
+      hash.each do |key, value|
+        if value.is_a?(Hash) && !is_pluralization?(value)
+          keys += keys_to_dot_notation value, prefix + [key]
+        else
+          keys += [(prefix + [key]).join(".")]
+        end
+      end
+
+      keys
+    end
+
+    def is_pluralization? node
+      node.keys.all? { |key| PLURALIZATION_KEYS.include?(key) }
+    end
+
+    def has_pluralization_keys? node
+      node.keys.any? { |key| PLURALIZATION_KEYS.include?(key) }
     end
 
     def pluralization_data?(data)
       keys = data.keys.map(&:to_s)
-      keys.any? {|k| PLURALIZATION_KEYS.include?(k) }
+      keys.any? { |k| PLURALIZATION_KEYS.include?(k) }
     end
-
-    def yaml_load_content
-      YAML.load(content)
-    end
-
   end
 end
