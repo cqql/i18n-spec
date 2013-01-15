@@ -2,12 +2,12 @@ RSpec::Matchers.define :be_parseable do
   match do |actual|
     begin
       I18nSpec::LocaleFile.from_file actual
+
+      true
     rescue SyntaxError => e
       @exception = e
 
       false
-    else
-      true
     end
   end
 

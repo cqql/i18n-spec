@@ -249,5 +249,19 @@ en:
     it "should return a new instance of LocaleFile" do
       I18nSpec::LocaleFile.from_file("spec/fixtures/en.yml").should be_a I18nSpec::LocaleFile
     end
+
+    it "should raise a SyntaxError if the file is not parseable" do
+      expect { I18nSpec::LocaleFile.from_file("spec/fixtures/unparseable.yml") }.to raise_error SyntaxError
+    end
+  end
+
+  describe "#is_parseable?" do
+    it "should return true if the file is parseable" do
+      I18nSpec::LocaleFile.is_parseable?("spec/fixtures/en.yml").should be true
+    end
+
+    it "should return false if the file is not parseable" do
+      I18nSpec::LocaleFile.is_parseable?("spec/fixtures/unparseable.yml").should be false
+    end
   end
 end

@@ -6,23 +6,27 @@ namespace :'i18n-spec' do
   desc "Checks the validity of a locale file"
   task :validate do
     if ARGV[1].nil?
-      puts "You must specifiy a file path or a folder path"
+      puts "You must specify a file path or a folder path"
       return
     elsif File.directory?(ARGV[1])
-      filepaths = Dir.glob("#{ARGV[1]}/*.yml")
+      paths = Dir.glob("#{ARGV[1]}/*.yml")
+    elsif File.file? ARGV[1]
+      paths = [ARGV[1]]
     else
-      filepaths = [ARGV[1]]
+      puts "#{ARGV[1]} is neither a valid path to a locale nor a folder containing locales"
     end
 
-    filepaths.each do |filepath|
-      heading filepath
+    paths.each do |path|
+      heading path
       fatals, errors, warnings = [0, 0, 0]
-      locale_file = I18nSpec::LocaleFile.new(filepath)
-      unless locale_file.is_parseable?
-        log :fatal, 'could not be parsed', format_str(locale_file.errors[:unparseable])
+
+      unless I18nSpec::LocaleFile.is_parseable? path
+        log :fatal, 'could not be parsed'
         fatals += 1
         break
       end
+
+      locale_file = I18nSpec::LocaleFile.from_file(path)
 
       unless locale_file.invalid_pluralization_keys.empty?
         log :error, 'invalid pluralization keys', format_array(locale_file.errors[:invalid_pluralization_keys])
@@ -43,13 +47,13 @@ namespace :'i18n-spec' do
       locale_files = [ARGV[2]]
     end
 
-    default_locale = I18nSpec::LocaleFile.new(ARGV[1])
+    default_locale = I18nSpec::LocaleFile.from_file(ARGV[1])
     any_locale_incomplete = false
 
     locale_files.each do |locale_path|
       heading locale_path
 
-      locale_file = I18nSpec::LocaleFile.new(locale_path)
+      locale_file = I18nSpec::LocaleFile.from_file(locale_path)
 
       if locale_file.is_a_complete_translation_of? default_locale
         log :complete

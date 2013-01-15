@@ -76,14 +76,12 @@ module I18nSpec
       flatten_keys filter.call(@translations)
     end
 
-    def is_parseable?
+    def self.is_parseable? path
       begin
+        from_file path
+
         true
-      rescue YAML::ParseError => e
-        @errors[:unparseable] = e.to_s
-        false
-      rescue ArgumentError => e
-        @errors[:unparseable] = e.to_s
+      rescue SyntaxError
         false
       end
     end
