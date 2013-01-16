@@ -64,7 +64,7 @@ namespace :'i18n-spec' do
     end
 
     if invalid
-      fail
+      exit 1
     end
   end
 
@@ -99,7 +99,7 @@ namespace :'i18n-spec' do
     end
 
     if any_locale_incomplete
-      fail
+      exit 1
     else
       puts "All locales are complete"
     end
