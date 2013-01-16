@@ -1,7 +1,5 @@
 require 'i18n-spec'
 
-I18nSpec::LOG_DETAIL_PREDICATE = "  - "
-
 namespace :'i18n-spec' do
   desc "Checks the validity of a locale file"
   task :validate do
@@ -16,24 +14,57 @@ namespace :'i18n-spec' do
       puts "#{ARGV[1]} is neither a valid path to a locale nor a folder containing locales"
     end
 
+    invalid = false
+
     paths.each do |path|
-      heading path
-      fatals, errors, warnings = [0, 0, 0]
-
       unless I18nSpec::LocaleFile.is_parseable? path
-        log :fatal, 'could not be parsed'
-        fatals += 1
-        break
+        invalid = true
+
+        puts "#{path} is not parseable"
+
+        next
       end
 
-      locale_file = I18nSpec::LocaleFile.from_file(path)
+      begin
+        locale_file = I18nSpec::LocaleFile.from_file(path)
+      rescue I18nSpec::LocaleFile::MultipleTopLevelKeys
+        invalid = true
 
-      unless locale_file.invalid_pluralization_keys.empty?
-        log :error, 'invalid pluralization keys', format_array(locale_file.errors[:invalid_pluralization_keys])
-        errors += 1
+        puts "#{path} has multiple top level keys"
+
+        next
       end
 
-      log :ok if fatals + errors + warnings == 0
+      invalid_pluralization_keys = locale_file.invalid_pluralization_keys
+      missing_pluralization_keys = locale_file.missing_pluralization_keys
+
+      if invalid_pluralization_keys.any?
+        invalid = true
+
+        puts "#{path} has invalid pluralizations:"
+
+        invalid_pluralization_keys.each do |key|
+          puts "  - #{key}"
+        end
+      end
+
+      if missing_pluralization_keys.any?
+        invalid = true
+
+        puts "#{path} has the following incomplete pluralizations:"
+
+        missing_pluralization_keys.each do |key, missing_pluralizations|
+          puts "  - \"#{key}\" misses"
+
+          missing_pluralizations.each do |pluralization_key|
+            puts "    - #{pluralization_key}"
+          end
+        end
+      end
+    end
+
+    if invalid
+      fail
     end
   end
 
@@ -47,42 +78,30 @@ namespace :'i18n-spec' do
       locale_files = [ARGV[2]]
     end
 
+    puts "Comparing locales to #{ARGV[1]}"
+    puts
+
     default_locale = I18nSpec::LocaleFile.from_file(ARGV[1])
     any_locale_incomplete = false
 
     locale_files.each do |locale_path|
-      heading locale_path
-
       locale_file = I18nSpec::LocaleFile.from_file(locale_path)
 
-      if locale_file.is_a_complete_translation_of? default_locale
-        log :complete
-      else
+      if !locale_file.is_a_complete_translation_of? default_locale
         any_locale_incomplete = true
 
-        locale_file.missing_keys_from_locale(default_locale).each { |miss| log :missing, miss }
+        puts "#{locale_path} is missing the following keys:"
+
+        locale_file.missing_keys_from_locale(default_locale).each do |key|
+          puts "  - #{key}"
+        end
       end
     end
 
     if any_locale_incomplete
-      raise "There were incomplete locales."
+      fail
+    else
+      puts "All locales are complete"
     end
-  end
-
-  def log(level, msg='', detail=nil)
-    puts "- *" << level.to_s.upcase << '* ' << msg 
-    puts detail if detail
-  end
-
-  def heading(str='')
-    puts "\n### " << str << "\n\n"
-  end
-
-  def format_array(array)
-    [I18nSpec::LOG_DETAIL_PREDICATE, array.join(I18nSpec::LOG_DETAIL_PREDICATE)].join
-  end
-
-  def format_str(str)
-    [I18nSpec::LOG_DETAIL_PREDICATE, str].join
   end
 end
